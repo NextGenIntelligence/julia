@@ -739,7 +739,7 @@ function precise_container_types(args, types, vtypes, sv)
         ai = args[i]; ti = types[i]
         if isa(ai,Expr) && (is_known_call(ai, svec, sv) || is_known_call(ai, tuple, sv))
             aa = ai.args
-            result[i] = Any[ exprtype(aa[j], sv) for j=2:length(aa) ]
+            result[i] = Any[ (isa(aa[j],Expr) ? aa[j].typ : abstract_eval(aa[j],vtypes,sv)) for j=2:length(aa) ]
         elseif ti<:Tuple && (i==n || !isvatuple(ti))
             result[i] = ti.parameters
         else

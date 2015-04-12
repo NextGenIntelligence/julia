@@ -2251,7 +2251,6 @@ static Value *emit_known_call(jl_value_t *ff, jl_value_t **args, size_t nargs,
         }
         // TODO: faster code for integer index
     }
-    /*
     else if (f->fptr == &jl_f_instantiate_type && nargs > 0) {
         size_t i;
         for(i=1; i <= nargs; i++) {
@@ -2261,7 +2260,7 @@ static Value *emit_known_call(jl_value_t *ff, jl_value_t **args, size_t nargs,
         if (i > nargs) {
             jl_value_t *ty = static_eval(expr, ctx, true, true);
             if (ty!=NULL && jl_is_leaf_type(ty)) {
-                if (jl_has_typevars(ty) || jl_is_tuple(ty)) {
+                if (jl_has_typevars(ty)) {
                     // add root for types not cached. issue #7065
                     jl_add_linfo_root(ctx->linfo, ty);
                 }
@@ -2270,7 +2269,6 @@ static Value *emit_known_call(jl_value_t *ff, jl_value_t **args, size_t nargs,
             }
         }
     }
-    */
     else if (f->fptr == &jl_f_sizeof && nargs == 1) {
         jl_datatype_t *sty = (jl_datatype_t*)expr_type(args[1], ctx);
         rt1 = (jl_value_t*)sty;

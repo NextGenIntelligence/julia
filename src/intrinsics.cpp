@@ -295,10 +295,8 @@ static Value *emit_unbox(Type *to, Value *x, jl_value_t *jt)
         assert(to != T_void);
         return UndefValue::get(to);
     }
-    if (to->isVectorTy())
-        // TODO: stricter alignment if possible
-        return builder.CreateAlignedLoad(builder.CreateBitCast(p, to->getPointerTo()), 1, false);
-    return builder.CreateLoad(builder.CreateBitCast(p, to->getPointerTo()), false);
+    // TODO: stricter alignment if possible
+    return builder.CreateAlignedLoad(builder.CreateBitCast(p, to->getPointerTo()), 1, false);
 }
 
 // unbox trying to determine type automatically

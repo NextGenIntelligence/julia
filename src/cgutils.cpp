@@ -590,7 +590,9 @@ static Type *julia_struct_to_llvm(jl_value_t *jt)
             }
             else {
                 if (isvector && lasttype != T_int1 && lasttype != T_void) {
-                    if (lasttype->isSingleValueType() && !lasttype->isVectorTy())
+                    // TODO: currently we get LLVM assertion failures for other vector sizes
+                    bool validVectorSize = ntypes <= 6 || (ntypes&1)==0;
+                    if (lasttype->isSingleValueType() && !lasttype->isVectorTy() && validVectorSize)
                         jst->struct_decl = VectorType::get(lasttype,ntypes);
                     else
                         jst->struct_decl = ArrayType::get(lasttype,ntypes);
