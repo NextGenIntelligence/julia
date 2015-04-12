@@ -962,16 +962,6 @@ void *jl_get_llvmf(jl_function_t *f, jl_tupletype_t *tt, bool getwrapper)
     return llvmf;
 }
 
-// Pre-declaration. Definition in disasm.cpp
-extern "C"
-void jl_dump_asm_internal(uintptr_t Fptr, size_t Fsize, size_t slide,
-#ifdef USE_MCJIT
-                          const object::ObjectFile *objectfile,
-#else
-                          std::vector<JITEvent_EmittedFunctionDetails::LineStart> lineinfo,
-#endif
-                          formatted_raw_ostream &stream);
-
 extern "C" DLLEXPORT
 const jl_value_t *jl_dump_function_ir(void *f, bool strip_ir_metadata)
 {
@@ -1018,6 +1008,16 @@ const jl_value_t *jl_dump_function_ir(void *f, bool strip_ir_metadata)
 
     return jl_cstr_to_string(const_cast<char*>(stream.str().c_str()));
 }
+
+// Pre-declaration. Definition in disasm.cpp
+extern "C"
+void jl_dump_asm_internal(uintptr_t Fptr, size_t Fsize, size_t slide,
+#ifdef USE_MCJIT
+                          const object::ObjectFile *objectfile,
+#else
+                          std::vector<JITEvent_EmittedFunctionDetails::LineStart> lineinfo,
+#endif
+                          formatted_raw_ostream &stream);
 
 extern "C" DLLEXPORT
 const jl_value_t *jl_dump_function_asm(void *f)
@@ -3936,7 +3936,9 @@ static Function *emit_function(jl_lambda_info_t *lam)
         dbuilder.createCompileUnit(0x01, filename, ".", "julia", true, "", 0);
         #else
         DICompileUnit CU = dbuilder.createCompileUnit(0x01, filename, ".", "julia", true, "", 0);
+        #ifndef LLVM37
         assert(CU.Verify());
+        #endif
         #endif
 
 
@@ -3987,7 +3989,9 @@ static Function *emit_function(jl_lambda_info_t *lam)
                                     f);           // Fn
         // set initial line number
         builder.SetCurrentDebugLocation(DebugLoc::get(lno, 0, (MDNode*)SP, NULL));
+        #ifndef LLVM37
         assert(SP.Verify() && SP.describes(f) && SP.getFunction() == f);
+        #endif
     }
 
     if (ctx.debug_enabled) {
@@ -4054,7 +4058,11 @@ static Function *emit_function(jl_lambda_info_t *lam)
         }
     }
 
+#ifdef LLVM37
+    std::map<jl_sym_t *, MDFile *> filescopes;
+#else
     std::map<jl_sym_t *, MDNode *> filescopes;
+#endif
 
     Value *fArg=NULL, *argArray=NULL, *argCount=NULL;
     unsigned argIdx = 0;
@@ -4399,19 +4407,31 @@ static Function *emit_function(jl_lambda_info_t *lam)
         }
         else if (jl_is_expr(stmt) && ((jl_expr_t*)stmt)->head == line_sym) {
             lno = jl_unbox_long(jl_exprarg(stmt, 0));
+            #ifdef LLVM37
+            MDFile *dfil = NULL;
+            #else
             MDNode *dfil = NULL;
+            #endif
             if (jl_array_dim0(((jl_expr_t*)stmt)->args) > 1) {
                 jl_value_t *a1 = jl_exprarg(stmt,1);
                 if (jl_is_symbol(a1)) {
                     jl_sym_t *file = (jl_sym_t*)a1;
                     // If the string is not empty
                     if (*file->name != '\0') {
+                        #ifdef LLVM37
+                        std::map<jl_sym_t *, MDFile *>::iterator it = filescopes.find(file);
+                        #else
                         std::map<jl_sym_t *, MDNode *>::iterator it = filescopes.find(file);
+                        #endif
                         if (it != filescopes.end()) {
                             dfil = it->second;
                         }
                         else {
+                            #ifdef LLVM37
+                            dfil = filescopes[file] = (MDFile*)dbuilder.createFile(file->name, ".");
+                            #else
                             dfil = filescopes[file] = (MDNode*)dbuilder.createFile(file->name, ".");
+                            #endif
                         }
                     }
                 }
