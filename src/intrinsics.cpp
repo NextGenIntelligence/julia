@@ -231,6 +231,9 @@ static Constant *julia_const_to_llvm(jl_value_t *e)
             assert(st);
             return ConstantStruct::get(st, ArrayRef<Constant*>(fields,llvm_nf));
         }
+        else if (t->isVectorTy()) {
+            return ConstantVector::get(ArrayRef<Constant*>(fields,llvm_nf));
+        }
         else {
             assert(t->isArrayTy());
             ArrayType *at = dyn_cast<ArrayType>(t);
@@ -292,6 +295,9 @@ static Value *emit_unbox(Type *to, Value *x, jl_value_t *jt)
         assert(to != T_void);
         return UndefValue::get(to);
     }
+    if (to->isVectorTy())
+        // TODO: stricter alignment if possible
+        return builder.CreateAlignedLoad(builder.CreateBitCast(p, to->getPointerTo()), 1, false);
     return builder.CreateLoad(builder.CreateBitCast(p, to->getPointerTo()), false);
 }
 
@@ -647,7 +653,8 @@ static Value *emit_pointerref(jl_value_t *e, jl_value_t *i, jl_codectx_t *ctx)
                             thePtr, size, 1);
         return mark_julia_type(strct, ety);
     }
-    return typed_load(thePtr, im1, ety, ctx, tbaa_user);
+    // TODO: alignment?
+    return typed_load(thePtr, im1, ety, ctx, tbaa_user, 1);
 }
 
 static Value *emit_runtime_pointerset(jl_value_t *e, jl_value_t *x, jl_value_t *i, jl_codectx_t *ctx)
@@ -708,7 +715,8 @@ static Value *emit_pointerset(jl_value_t *e, jl_value_t *x, jl_value_t *i, jl_co
             else
                 val = emit_unboxed(x,ctx);
         }
-        typed_store(thePtr, im1, val, ety, ctx, tbaa_user, NULL);
+        // TODO: alignment?
+        typed_store(thePtr, im1, val, ety, ctx, tbaa_user, NULL, 1);
     }
     return mark_julia_type(thePtr, aty);
 }

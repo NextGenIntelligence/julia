@@ -586,11 +586,9 @@ static Type *julia_struct_to_llvm(jl_value_t *jt)
             }
             else {
                 if (isvector && lasttype != T_int1 && lasttype != T_void) {
-                    // TODO: don't use vector types for now; I believe they lead to
-                    // mis-aligned stores when boxing tuples.
-                    //if (lasttype->isSingleValueType() && !lasttype->isVectorTy())
-                    //    jst->struct_decl = VectorType::get(lasttype,ntypes);
-                    //else
+                    if (lasttype->isSingleValueType() && !lasttype->isVectorTy())
+                        jst->struct_decl = VectorType::get(lasttype,ntypes);
+                    else
                         jst->struct_decl = ArrayType::get(lasttype,ntypes);
                 }
                 else {
@@ -983,7 +981,7 @@ static Value *emit_bounds_check(Value *a, jl_value_t *ty, Value *i, Value *len, 
 static Value *ghostValue(jl_value_t *ty);
 
 static Value *typed_load(Value *ptr, Value *idx_0based, jl_value_t *jltype,
-                         jl_codectx_t *ctx, MDNode* tbaa)
+                         jl_codectx_t *ctx, MDNode* tbaa, size_t alignment = 0)
 {
     Type *elty = julia_type_to_llvm(jltype);
     assert(elty != NULL);
@@ -996,7 +994,8 @@ static Value *typed_load(Value *ptr, Value *idx_0based, jl_value_t *jltype,
         data = builder.CreateBitCast(ptr, PointerType::get(elty, 0));
     else
         data = ptr;
-    Value *elt = tbaa_decorate(tbaa, builder.CreateLoad(builder.CreateGEP(data, idx_0based), false));
+    Value *elt = tbaa_decorate(tbaa, builder.CreateAlignedLoad(builder.CreateGEP(data, idx_0based),
+                                                               alignment, false));
     if (elty == jl_pvalue_llvmt)
         null_pointer_check(elt, ctx);
     if (isbool)
@@ -1008,7 +1007,8 @@ static Value *emit_unbox(Type *to, Value *x, jl_value_t *jt);
 
 static void typed_store(Value *ptr, Value *idx_0based, Value *rhs,
                         jl_value_t *jltype, jl_codectx_t *ctx, MDNode* tbaa,
-                        Value* parent)  // for the write barrier, NULL if no barrier needed
+                        Value* parent,  // for the write barrier, NULL if no barrier needed
+                        size_t alignment = 0)
 {
     Type *elty = julia_type_to_llvm(jltype);
     assert(elty != NULL);
@@ -1027,7 +1027,7 @@ static void typed_store(Value *ptr, Value *idx_0based, Value *rhs,
         data = builder.CreateBitCast(ptr, PointerType::get(elty, 0));
     else
         data = ptr;
-    tbaa_decorate(tbaa, builder.CreateStore(rhs, builder.CreateGEP(data, idx_0based)));
+    tbaa_decorate(tbaa, builder.CreateAlignedStore(rhs, builder.CreateGEP(data, idx_0based), alignment));
 }
 
 // --- convert boolean value to julia ---
@@ -1149,7 +1149,7 @@ static Value *emit_getfield_unknownidx(Value *strct, Value *idx, jl_datatype_t *
             jl_value_t *jt = jl_field_type(stt, 0);
             idx = emit_bounds_check(strct, NULL, idx, ConstantInt::get(T_size, nfields), ctx);
             Value *ptr = data_pointer(strct);
-            return typed_load(ptr, idx, jt, ctx, stt->mutabl ? tbaa_user : tbaa_immut);
+            return typed_load(ptr, idx, jt, ctx, stt->mutabl ? tbaa_user : tbaa_immut, 1);
         }
         else {
             idx = builder.CreateSub(idx, ConstantInt::get(T_size, 1));
@@ -1180,7 +1180,7 @@ static Value *emit_getfield_unknownidx(Value *strct, Value *idx, jl_datatype_t *
             }
             // TODO: pass correct thing to emit_bounds_check ?
             idx = emit_bounds_check(tempSpace, (jl_value_t*)stt, idx, ConstantInt::get(T_size, nfields), ctx);
-            fld = typed_load(tempSpace, idx, jt, ctx, stt->mutabl ? tbaa_user : tbaa_immut);
+            fld = typed_load(tempSpace, idx, jt, ctx, stt->mutabl ? tbaa_user : tbaa_immut, 1);
             builder.CreateCall(Intrinsic::getDeclaration(jl_Module,Intrinsic::stackrestore),
                                stacksave);
         }
@@ -1209,12 +1209,12 @@ static Value *emit_getfield_knownidx(Value *strct, unsigned idx, jl_datatype_t *
             return fldv;
         }
         else {
-            return typed_load(addr, ConstantInt::get(T_size, 0), jfty, ctx, tbaa);
+            return typed_load(addr, ConstantInt::get(T_size, 0), jfty, ctx, tbaa, 1);
         }
     }
     else {
         if (strct->getType()->isVectorTy()) {
-            fldv = builder.CreateExtractElement(strct, ConstantInt::get(T_size, idx));
+            fldv = builder.CreateExtractElement(strct, ConstantInt::get(T_int32, idx));
         }
         else {
             fldv = builder.CreateExtractValue(strct, ArrayRef<unsigned>(&idx,1));
@@ -1410,8 +1410,8 @@ static Value *tpropagate(Value *a, Value *b)
 static Value *init_bits_value(Value *newv, Value *jt, Type *t, Value *v)
 {
     builder.CreateStore(jt, builder.CreateBitCast(emit_typeptr_addr(newv), jl_ppvalue_llvmt));
-    builder.CreateStore(v , builder.CreateBitCast(data_pointer(newv),
-                                                  PointerType::get(t,0)));
+    // TODO: stricter alignment if possible
+    builder.CreateAlignedStore(v, builder.CreateBitCast(data_pointer(newv), PointerType::get(t,0)), 1);
     return newv;
 }
 
@@ -1690,7 +1690,7 @@ static Value *emit_setfield(jl_datatype_t *sty, Value *strct, size_t idx0,
             if (wb) emit_checked_write_barrier(ctx, strct, rhs);
         }
         else {
-            typed_store(addr, ConstantInt::get(T_size, 0), rhs, jfty, ctx, sty->mutabl ? tbaa_user : tbaa_immut, strct);
+            typed_store(addr, ConstantInt::get(T_size, 0), rhs, jfty, ctx, sty->mutabl ? tbaa_user : tbaa_immut, strct, 1);
         }
     }
     else {
