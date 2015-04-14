@@ -162,11 +162,7 @@ A_ldiv_Bt (a,b) = a\transpose(b)
 At_ldiv_Bt(a,b) = transpose(a)\transpose(b)
 
 
-oftype(x,c) = convert(typeof(x),c)
-
 widen{T<:Number}(x::T) = convert(widen(T), x)
-
-sizeof(x) = Core.sizeof(x)
 
 eltype(::Type) = Any
 eltype(::Type{Any}) = Any

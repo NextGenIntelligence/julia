@@ -1154,10 +1154,12 @@ DLLEXPORT uptrint_t jl_object_id(jl_value_t *v)
     jl_datatype_t *dt = (jl_datatype_t*)tv;
     if (dt == jl_datatype_type) {
         jl_datatype_t *dtv = (jl_datatype_t*)v;
-        uptrint_t h = inthash((uptrint_t)tv);
-        return bitmix(bitmix(h, jl_object_id((jl_value_t*)dtv->name)),
+        uptrint_t h = 0xda1ada1a;
+        return bitmix(bitmix(h, dtv->name->uid),
                       jl_object_id((jl_value_t*)dtv->parameters));
     }
+    if (dt == jl_typename_type)
+        return bitmix(((jl_typename_t*)v)->uid, 0xa1ada1ad);
     if (dt->mutabl) return inthash((uptrint_t)v);
     size_t sz = jl_datatype_size(tv);
     uptrint_t h = inthash((uptrint_t)tv);

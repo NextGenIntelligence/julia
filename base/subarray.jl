@@ -289,7 +289,6 @@ stagedfunction sub_unsafe{T,NV,PV,IV,PLD,IndTypes}(V::SubArray{T,NV,PV,IV,PLD}, 
     Inew = :(tuple($(indexexprs...)))
     dims = :(tuple($(sizeexprs...)))
     It = Tuple{Itypes...}
-    ItLD = Tuple{ItypesLD...}
     LD = max(LD, subarray_linearindexing_dim(PV, It))
     strideexpr = stride1expr(PV, ItypesLD, :(V.parent), :Inew, LD)
     preex = isempty(preexprs) ? nothing : Expr(:block, preexprs...)

@@ -251,6 +251,7 @@ typedef struct {
     // not the original.
     jl_value_t *primary;
     jl_value_t *cache;
+    ptrint_t uid;
 } jl_typename_t;
 
 typedef struct {

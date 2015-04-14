@@ -757,6 +757,11 @@ function abstract_apply(af, fargs, aargtypes::Vector{Any}, vtypes, sv, e)
         # apply with known func with known tuple types
         # can be collapsed to a call to the applied func
         at = append_any(ctypes...)
+        n = length(at)
+        if n > MAX_TUPLETYPE_LEN
+            tail = foldl((a,b)->tmerge(a,unwrapva(b)), Bottom, at[MAX_TUPLETYPE_LEN:n])
+            at = vcat(at[1:MAX_TUPLETYPE_LEN-1], Any[Vararg{tail}])
+        end
         return abstract_call(af, (), at, vtypes, sv, ())
     end
     if is(af,tuple) && length(aargtypes)==1

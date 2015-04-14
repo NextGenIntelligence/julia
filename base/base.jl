@@ -49,7 +49,7 @@ end
 
 isvarargtype(t::ANY) = isa(t,DataType)&&is((t::DataType).name,Vararg.name)
 isvatuple(t::DataType) = (n = length(t.parameters); n > 0 && isvarargtype(t.parameters[n]))
-unwrapva(t) = isvarargtype(t) ? t.parameters[1] : t
+unwrapva(t::ANY) = isvarargtype(t) ? t.parameters[1] : t
 
 stagedfunction tuple_type_tail{T<:Tuple}(::Type{T})
     if isvatuple(T) && length(T.parameters) == 1
@@ -64,6 +64,11 @@ tail(x::Tuple) = argtail(x...)
 convert{T<:Tuple{Any,Any,...}}(::Type{T}, x::Tuple{Any, Any, ...}) =
     tuple(convert(tuple_type_head(T),x[1]), convert(tuple_type_tail(T), tail(x))...)
 
+oftype(x,c) = convert(typeof(x),c)
+
+unsigned(x::Int) = reinterpret(UInt, x)
+signed(x::UInt) = reinterpret(Int, x)
+
 # conversions used by ccall
 ptr_arg_cconvert{T}(::Type{Ptr{T}}, x) = cconvert(T, x)
 ptr_arg_unsafe_convert{T}(::Type{Ptr{T}}, x) = unsafe_convert(T, x)
@@ -75,6 +80,8 @@ unsafe_convert{T}(::Type{T}, x::T) = x # unsafe_convert (like convert) defaults 
 unsafe_convert{P<:Ptr}(::Type{P}, x::Ptr) = convert(P, x)
 
 reinterpret{T,S}(::Type{T}, x::S) = box(T,unbox(S,x))
+
+sizeof(x) = Core.sizeof(x)
 
 abstract IO
 
